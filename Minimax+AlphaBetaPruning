@@ -1,0 +1,374 @@
+def move_compare(move1, move2):
+    from_row1, from_col1, to_row1, to_col1 = move1
+    from_row2, from_col2, to_row2, to_col2 = move2
+
+    if from_row1 > from_row2:
+        return -1
+    elif from_row1 < from_row2:
+        return 1
+    elif from_col1 < from_col2:
+        return -1
+    elif from_col1 > from_col2:
+        return 1
+    elif to_row1 > to_row2:
+        return -1
+    elif to_row1 < to_row2:
+        return 1
+    elif to_col1 < to_col2:
+        return -1
+    elif to_col1 > to_col2:
+        return 1
+    else:
+        return 0
+
+
+class Consts:
+    STAR_PLAYER = 0
+    CIRCLE_PLAYER = 1
+    A = 0
+    H = 7
+    ONE = 0
+    EIGHT = 7
+    MINIMAX_ALGO = 0
+    ALPHABETA_ALGO = 1
+
+class GameBoard:
+    def __init__(self):
+        self.star_pieces = dict() # key = (row, col), value = num_of_pieces at the location
+        self.circle_pieces = dict()
+
+    def is_gameover(self):
+        if len(self.star_pieces) == 0 or len(self.circle_pieces) == 0:
+            return True
+
+        if len(self.find_all_moves(Consts.STAR_PLAYER)) == 0 and len(self.find_all_moves(Consts.CIRCLE_PLAYER_PLAYER)) == 0:
+            return True
+
+        return False
+
+
+    def add_piece(self, row, col, piece):
+        num = int(piece[1:]) # number of pieces at the location
+        if piece[0] == 'S':
+            self.star_pieces[(row, col)] = num
+        else:
+            self.circle_pieces[(row, col)] = num
+
+
+    def find_all_moves(self, player):
+        moves = list()
+        if player == Consts.STAR_PLAYER:
+            for loc in self.star_pieces:
+                from_row, from_col = loc
+
+                # move one row forward, left
+                to_row = from_row + 1
+                to_col = from_col - 1
+                if to_row <= Consts.H and to_col >= Consts.ONE and (to_row, to_col) not in self.circle_pieces:
+                    moves.append((from_row, from_col, to_row, to_col))
+
+                # move one row forward, right
+                to_row = from_row + 1
+                to_col = from_col + 1
+                if to_row <= Consts.H and to_col <= Consts.EIGHT and (to_row, to_col) not in self.circle_pieces:
+                    moves.append((from_row, from_col, to_row, to_col))
+
+                # move two rows forward, left
+                to_row = from_row + 2
+                to_col = from_col - 2
+                if to_row <= Consts.H and to_col >= Consts.ONE and (from_row+1, from_col-1) in self.circle_pieces:
+                    moves.append((from_row, from_col, to_row, to_col))
+
+                # move two rows forward, right
+                to_row = from_row + 2
+                to_col = from_col + 2
+                if to_row <= Consts.H and to_col <= Consts.EIGHT and (from_row+1, from_col+1) in self.circle_pieces:
+                    moves.append((from_row, from_col, to_row, to_col))
+
+        else: # player == Consts.CIRCLE_PLAYER
+            for loc in self.circle_pieces:
+                from_row, from_col = loc
+
+                # move one row forward, right
+                to_row = from_row - 1
+                to_col = from_col - 1
+                if to_row >= Consts.A and to_col >= Consts.ONE and (to_row, to_col) not in self.star_pieces:
+                    moves.append((from_row, from_col, to_row, to_col))
+
+                # move one row forward, left
+                to_row = from_row - 1
+                to_col = from_col + 1
+                if to_row >= Consts.A and to_col <= Consts.EIGHT and (to_row, to_col) not in self.star_pieces:
+                    moves.append((from_row, from_col, to_row, to_col))
+
+                # move two rows forward, right
+                to_row = from_row - 2
+                to_col = from_col - 2
+                if to_row >= Consts.A and to_col >= Consts.ONE and (from_row - 1, from_col - 1) in self.star_pieces:
+                    moves.append((from_row, from_col, to_row, to_col))
+
+                # move two rows forward, left
+                to_row = from_row - 2
+                to_col = from_col + 2
+                if to_row >= Consts.A and to_col <= Consts.EIGHT and (from_row - 1, from_col + 1) in self.star_pieces:
+                    moves.append((from_row, from_col, to_row, to_col))
+
+        return sorted(moves, move_compare)
+
+    # return a new GameBoard, action is a valid move
+    def move(self, player, action):
+        board = GameBoard()
+        board.star_pieces = self.star_pieces.copy()
+        board.circle_pieces = self.circle_pieces.copy()
+        from_row, from_col, to_row, to_col = action
+
+        if player == Consts.STAR_PLAYER:
+            # update to
+            if (to_row, to_col) in board.star_pieces:
+                board.star_pieces[(to_row, to_col)] += 1
+            else:
+                board.star_pieces[(to_row, to_col)] = 1
+
+            # delete from
+            del board.star_pieces[(from_row, from_col)]
+
+            # capture circle
+            if to_row == from_row + 2:
+                if to_col == from_col - 2:
+                    del board.circle_pieces[(from_row + 1, from_col - 1)]
+                else:
+                    del board.circle_pieces[(from_row + 1, from_col + 1)]
+
+        else: # player == Consts.STAR_PLAYER
+            # update to
+            if (to_row, to_col) in board.circle_pieces:
+                board.circle_pieces[(to_row, to_col)] += 1
+            else:
+                board.circle_pieces[(to_row, to_col)] = 1
+
+            # delete from
+            del board.circle_pieces[(from_row, from_col)]
+
+            # capture star
+            if to_row == from_row - 2:
+                if to_col == from_col - 2:
+                    del board.circle_pieces[(from_row - 1, from_col - 1)]
+                else:
+                    del board.circle_pieces[(from_row - 1, from_col + 1)]
+
+        return board
+
+    # calculate the utility
+    def utility(self, player, weight):
+        value = 0
+        if player == Consts.STAR_PLAYER:
+            for loc in self.star_pieces:
+                num = self.star_pieces[loc]
+                row, _ = loc
+                value += num * weight[row]
+            for loc in self.circle_pieces:
+                num = self.circle_pieces[loc]
+                row, _ = loc
+                value -= num * weight[Consts.H - row]
+        else:
+            for loc in self.circle_pieces:
+                num = self.circle_pieces[loc]
+                row, _ = loc
+                value += num * weight[row]
+            for loc in self.star_pieces:
+                num = self.star_pieces[loc]
+                row, _ = loc
+                value -= num * weight[Consts.H - row]
+
+        return value
+
+
+
+class Minimax:
+    def __init__(self, player, depth_limit, init_board, weight):
+        self.player = player
+        self.opponent = 1 - player
+        self.depth_limit = depth_limit
+        self.init_board = init_board
+        self.weight = weight
+        self.visited_nodes = 0
+
+
+    def minimax(self, who, board, depth):
+        self.visited_nodes += 1
+        best_utility = None
+        best_move = None
+
+        if depth == self.depth_limit:
+            best_utility = board.utility(self.player, self.weight)
+            return (best_utility, None)
+
+        if board.is_gameover():
+            best_utility = board.utility(self.player, self.weight)
+            return (best_utility, None)
+
+        moves = board.find_all_moves(who)
+        for move in moves:
+            new_board = board.move(who, move)
+
+            if (who == self.player): # max
+                utility, _ = self.minimax(self.opponent, new_board, depth + 1)
+                if best_utility is None:
+                    best_utility = utility
+                    best_move = move
+                elif utility > best_utility:
+                    best_utility = utility
+                    best_move = move
+                elif utility == best_utility and move_compare(move, best_move) == -1:
+                    best_utility = utility
+                    best_move = move
+            else: # min
+                utility, _ = self.minimax(self.player, new_board, depth + 1)
+                if best_utility is None:
+                    best_utility = utility
+                    best_move = move
+                elif utility < best_utility:
+                    best_utility = utility
+                    best_move = move
+                elif utility == best_utility and move_compare(move, best_move) == -1:
+                    best_utility = utility
+                    best_move = move
+
+        return (best_utility, best_move)
+
+    def move_to_str(self, move):
+        ROWS = ("A", "B", "C", "D", "E", "F", "G", "H");
+        from_row, from_col, to_row, to_col = move
+        return ROWS[from_row] + str(from_col+1) + "-" + ROWS[to_row] + str(to_col+1)
+
+    def findNextMove(self):
+        farsighted_utility, move = self.minimax(self.player, self.init_board, 0)
+        myopic_utility = self.init_board.move(self.player, move).utility(self.player, self.weight)
+        with open('./output.txt', 'w') as f:
+            f.write(self.move_to_str(move) + "\n")
+            f.write(str(myopic_utility) + "\n")
+            f.write(str(farsighted_utility) + "\n")
+            f.write(str(self.visited_nodes))
+
+
+class AlphaBeta:
+    def __init__(self, player, depth_limit, init_board, weight):
+        self.player = player
+        self.opponent = 1 - player
+        self.depth_limit = depth_limit
+        self.init_board = init_board
+        self.weight = weight
+        self.visited_nodes = 0
+
+
+    def minimax(self, who, board, depth, alpha, beta):
+        self.visited_nodes += 1
+        best_utility = None
+        best_move = None
+
+        if depth == self.depth_limit:
+            best_utility = board.utility(self.player, self.weight)
+            return (best_utility, None)
+
+        if board.is_gameover():
+            best_utility = board.utility(self.player, self.weight)
+            return (best_utility, None)
+
+        moves = board.find_all_moves(who)
+        for move in moves:
+            new_board = board.move(who, move)
+
+            if (who == self.player): # max
+                utility, _ = self.minimax(self.opponent, new_board, depth + 1, alpha, beta)
+                if best_utility is None:
+                    best_utility = utility
+                    best_move = move
+                elif utility > best_utility:
+                    best_utility = utility
+                    best_move = move
+                elif utility == best_utility and move_compare(move, best_move) == -1:
+                    best_utility = utility
+                    best_move = move
+
+                alpha = max(alpha, best_utility)
+                if beta <= alpha:
+                    break
+
+            else: # min
+                utility, _ = self.minimax(self.player, new_board, depth + 1, alpha, beta)
+                if best_utility is None:
+                    best_utility = utility
+                    best_move = move
+                elif utility < best_utility:
+                    best_utility = utility
+                    best_move = move
+                elif utility == best_utility and move_compare(move, best_move) == -1:
+                    best_utility = utility
+                    best_move = move
+
+                beta = min(beta, best_utility)
+                if beta <= alpha:
+                    break;
+
+        return (best_utility, best_move)
+
+    def move_to_str(self, move):
+        ROWS = ("A", "B", "C", "D", "E", "F", "G", "H");
+        from_row, from_col, to_row, to_col = move
+        return ROWS[from_row] + str(from_col+1) + "-" + ROWS[to_row] + str(to_col+1)
+
+    def findNextMove(self):
+        INF = 2147483647
+        NEG_INF = -2147483648
+        farsighted_utility, move = self.minimax(self.player, self.init_board, 0, NEG_INF, INF)
+        myopic_utility = self.init_board.move(self.player, move).utility(self.player, self.weight)
+        with open('./output.txt', 'w') as f:
+            f.write(self.move_to_str(move) + "\n")
+            f.write(str(myopic_utility) + "\n")
+            f.write(str(farsighted_utility) + "\n")
+            f.write(str(self.visited_nodes))
+
+def main():
+    with open('./input.txt', 'r') as f:
+        # player
+        if f.readline().rstrip() == "Star":
+            player = Consts.STAR_PLAYER
+        else:
+            player = Consts.CIRCLE_PLAYER
+
+        # algorithm
+        if f.readline().rstrip() == "MINIMAX":
+            algo = Consts.MINIMAX_ALGO
+        else:
+            algo = Consts.ALPHABETA_ALGO
+
+        # depth limit
+        depth_limit = int(f.readline().rstrip())
+
+        # board
+        init_board = GameBoard()
+        for i in range(0, 8):
+            line = f.readline().rstrip()
+            pieces = line.split(",")
+            for c in range(0, 8):
+                if pieces[c] != "0":
+                    init_board.add_piece(Consts.H - i, c, pieces[c])
+
+        # weight
+        weight = f.readline().strip().split(",")
+        for i in range(0, len(weight)):
+            weight[i] = int(weight[i])
+        if player == Consts.CIRCLE_PLAYER:
+            weight = weight.reverse()
+
+    if algo == Consts.MINIMAX_ALGO:
+        minimax = Minimax(player, depth_limit, init_board, weight)
+        minimax.findNextMove()
+    else:
+        minimax = AlphaBeta(player, depth_limit, init_board, weight)
+        minimax.findNextMove()
+
+
+
+if __name__ == "__main__":
+    main()
