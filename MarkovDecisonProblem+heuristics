@@ -1,0 +1,469 @@
+# -*- coding: utf-8 -*-
+import random
+
+class GridWorld:
+    """A two-dimensional GridWorld
+    rows, cols: <GRID SIZE>
+    walls: <WALL CELLS POSITION>, set of tuple(row, col)
+    terminals: <TERMINAL STATES POSITION and REWARDS>, dictionary {(row, col): reward}
+    p_walk, p_run: <TRANSITION MODEL>, probability
+    r_walk, r_run: <REWARDS>
+    gamma: <DISCOUNT FACTOR>"""
+
+    walk_up = (1, 0)
+    walk_down = (-1, 0)
+    walk_left = (0, -1)
+    walk_right = (0, 1)
+    run_up = (2, 0)
+    run_down = (-2, 0)
+    run_left = (0, -2)
+    run_right = (0, 2)
+    #  The order ensures to break tie with the following rule
+    #  "Walk Up" > "Walk Down" > "Walk Left" > "Walk Right" > "Run Up" > "Run Down" > "Run Left" > "Run Right"
+    actions = [walk_up, walk_down, walk_left, walk_right, run_up, run_down, run_left, run_right]
+    actions_str = {walk_up: 'Walk Up', walk_down: 'Walk Down', walk_left: 'Walk Left', walk_right: 'Walk Right',
+        run_up: 'Run Up', run_down: 'Run Down', run_left: 'Run Left', run_right:'Run Right'}
+
+    def __init__(self, rows, cols, walls, terminals, p_walk, p_run, r_walk, r_run, gamma):
+        self.rows = rows
+        self.cols = cols
+        self.walls = walls
+        self.terminals = terminals
+        self.p_walk = p_walk
+        self.p_walk_angle = 0.5 * (1.0 - p_walk)
+        self.p_run = p_run
+        self.p_run_angle = 0.5 * (1.0 - p_run)
+        self.r_walk = r_walk
+        self.r_run = r_run
+        self.gamma = gamma
+
+    def t(self, state, action):
+        # return a list - [(probability, new_state)]
+        if state in self.terminals:
+            return [(1.0, state)]
+        else:
+            if action == GridWorld.run_right:
+                return [(self.p_run, self.go(state, action)),
+                        (self.p_run_angle, self.go(state, GridWorld.run_down)),
+                        (self.p_run_angle, self.go(state, GridWorld.run_up))]
+            elif action == GridWorld.run_left:
+                return [(self.p_run, self.go(state, action)),
+                        (self.p_run_angle, self.go(state, GridWorld.run_up)),
+                        (self.p_run_angle, self.go(state, GridWorld.run_down))]
+            elif action == GridWorld.run_down:
+                return [(self.p_run, self.go(state, action)),
+                        (self.p_run_angle, self.go(state, GridWorld.run_left)),
+                        (self.p_run_angle, self.go(state, GridWorld.run_right))]
+            elif action == GridWorld.run_up:
+                return [(self.p_run, self.go(state, action)),
+                        (self.p_run_angle, self.go(state, GridWorld.run_right)),
+                        (self.p_run_angle, self.go(state, GridWorld.run_left))]
+            elif action == GridWorld.walk_right:
+                return [(self.p_walk, self.go(state, action)),
+                        (self.p_walk_angle, self.go(state, GridWorld.walk_down)),
+                        (self.p_walk_angle, self.go(state, GridWorld.walk_up))]
+            elif action == GridWorld.walk_left:
+                return [(self.p_walk, self.go(state, action)),
+                        (self.p_walk_angle, self.go(state, GridWorld.walk_up)),
+                        (self.p_walk_angle, self.go(state, GridWorld.walk_down))]
+            elif action == GridWorld.walk_down:
+                return [(self.p_walk, self.go(state, action)),
+                        (self.p_walk_angle, self.go(state, GridWorld.walk_left)),
+                        (self.p_walk_angle, self.go(state, GridWorld.walk_right))]
+            else:  # action == GridWorld.walk_up
+                return [(self.p_walk, self.go(state, action)),
+                        (self.p_walk_angle, self.go(state, GridWorld.walk_right)),
+                        (self.p_walk_angle, self.go(state, GridWorld.walk_left))]
+
+    def r(self, state, action):
+        if action in [GridWorld.walk_down, GridWorld.walk_up, GridWorld.walk_left, GridWorld.walk_right]:
+            reward = self.r_walk
+        else:
+            reward = self.r_run
+        return reward
+
+    def go(self, state, action):
+        # state is tuple(row, col)
+        # action is tuple(delta_row, delta_col)
+        (row, col) = state
+        (delta_row, delta_col) = action
+        new_row = row + delta_row
+        new_col = col + delta_col
+        new_state = (new_row, new_col)
+
+        if 1 <= new_row <= self.rows and 1 <= new_col <= self.cols and new_state not in self.walls:
+            # after move, it is inside the GridWorld and new state is not a wall cell
+            # now check if there is wall between s and s1
+            if delta_row == 2 and (row + 1, col) in self.walls:
+                return state
+            elif delta_row == -2 and (row - 1, col) in self.walls:
+                return state
+            elif delta_col == 2 and (row, col + 1) in self.walls:
+                return state
+            elif delta_col == -2 and (row, col - 1) in self.walls:
+                return state
+            else:
+                return new_state
+        else:
+            return state
+
+
+class GridWorldVI(GridWorld):
+    """Value iteration"""
+
+    def print_u(self, u):
+        for r in range(1, self.rows+1):
+            for c in range(1, self.cols+1):
+                s = (r, c)
+                if s in u:
+                    v = u[s]
+                else:
+                    v = None
+                print("{} -> {}".format(s, v))
+
+    def value_iteration(self, epsilon=0.001):
+        criteria = epsilon * (1 - self.gamma) / self.gamma
+        # Initialize utility function which is defined as dictionary {state: number}
+        u1 = dict()
+        for r in range(1, self.rows + 1):
+            for c in range(1, self.cols + 1):
+                s = (r, c)
+                if s in self.terminals:
+                    u1[s] = self.terminals[s]
+                elif s not in self.walls:
+                    u1[s] = 0.0
+        #u = u1.copy()
+
+        while True:
+            #(u, u1) = (u1, u)  # swap
+            u = u1.copy()
+            delta = 0.0
+            for s in u:
+                if s not in self.terminals:
+                    vs = []
+                    for a in self.actions:
+                        sigma = 0.0
+                        for (p, s1) in self.t(s, a):
+                            sigma += p * u[s1]
+                        vs.append(self.r(s, a) + self.gamma * sigma)
+                    u1[s] = max(vs)
+                    delta = max(delta, abs(u1[s] - u[s]))
+            if delta < criteria:
+                return u1
+
+    def best_policy(self, u):
+        """Given  a utility function u, determine the best policy.
+        Policy is defined as a dictionary {state:action_index}, action_index points to GridWorld.actions"""
+        #self.print_u(u)
+        pi = {}
+        for s in u:
+            if s not in self.terminals:
+                # calculate expected_utilities for different action in state s
+                expected_utilities = []
+                for a in self.actions:
+                    sigma = 0.0
+                    for (p, s1) in self.t(s, a):
+                        sigma += p * u[s1]
+                    expected_utilities.append(self.r(s, a) + self.gamma * sigma)
+
+                # print("{}: {}".format(s, expected_utilities))
+                # find the best action for state s
+                best_eu = expected_utilities[0]
+                best_a = GridWorld.actions[0]
+                for i in range(1, 8):  # 8 actions
+                    if expected_utilities[i] > best_eu:
+                        best_eu = expected_utilities[i]
+                        best_a = GridWorld.actions[i]
+                pi[s] = best_a
+        return pi
+
+    def run(self):
+        # calculate utility function using value iteration
+        u = self.value_iteration(epsilon=0.001)
+
+        # find the best policy given u
+        best_pi = self.best_policy(u)
+
+        # write result
+        with open('output.txt', 'w') as f:
+            for r in range(self.rows, 0, -1):
+                comma = ''
+                for c in range(1, self.cols+1):
+                    s = (r, c)
+                    if s in self.terminals:
+                        f.write(comma + "Exit")
+                    elif s in self.walls:
+                        f.write(comma + "None")
+                    else:
+                        f.write(comma + GridWorld.actions_str[best_pi[s]])
+                    comma = ','
+                f.write("\n")
+
+
+class GridWorldPI(GridWorld):
+    """Policy iteration"""
+
+    def policy_iteration(self):
+        u = dict()
+        pi = dict()
+        for r in range(1, self.rows + 1):
+            for c in range(1, self.cols + 1):
+                s = (r, c)
+                if s in self.terminals:
+                    u[s] = self.terminals[s]
+                elif s not in self.walls:
+                    u[s] = 0.0
+                    pi[s] = GridWorld.actions[random.randint(0, 7)]
+                    # pi[s] = GridWorld.run_up
+
+        while True:
+            u = self.policy_evaluate(pi, u)
+            unchanged = True
+            for s in u:
+                if s not in self.terminals:
+                    # calculate expected_utilities for different action in state s
+                    expected_utilities = []
+                    for a in self.actions:
+                        sigma = 0.0
+                        for (p, s1) in self.t(s, a):
+                            sigma += p * u[s1]
+                        expected_utilities.append(self.r(s, a) + self.gamma * sigma)
+
+                    # print("{}: {}".format(s, expected_utilities))
+                    # find the best action for state s
+                    best_eu = expected_utilities[0]
+                    best_a = GridWorld.actions[0]
+                    for i in range(1, 8):  # 8 actions
+                        if expected_utilities[i] > best_eu:
+                            best_eu = expected_utilities[i]
+                            best_a = GridWorld.actions[i]
+                    if best_a != pi[s]:
+                        pi[s] = best_a
+                        unchanged = False
+            if unchanged:
+                return pi
+
+    def policy_evaluate(self, pi, u, k=20):
+        for i in range(k):
+            for s in u:
+                if s not in self.terminals:
+                    a = pi[s]
+                    u[s] = self.r(s, a) + self.gamma * sum([p * u[s1] for (p, s1) in self.t(s, a)])
+        return u
+
+    def run(self):
+        pi = self.policy_iteration()
+
+        # write result
+        with open('output.txt', 'w') as f:
+            for r in range(self.rows, 0, -1):
+                comma = ''
+                for c in range(1, self.cols + 1):
+                    s = (r, c)
+                    if s in self.terminals:
+                        f.write(comma + "Exit")
+                    elif s in self.walls:
+                        f.write(comma + "None")
+                    else:
+                        f.write(comma + GridWorld.actions_str[pi[s]])
+                    comma = ','
+                f.write("\n")
+
+
+class GridWorldPIEnhanced(GridWorld):
+    """Policy iteration"""
+
+    def policy_iteration(self):
+        # initialize utilities (u) and policy (pi)
+        u = dict()  # utilities
+        pi = dict()  # policy
+        tt = dict()  # tansition table, dictionary {s1: set(s)}, i.e., (s,a)->s1
+        policy_changed_states = set()
+        for r in range(1, self.rows + 1):
+            for c in range(1, self.cols + 1):
+                s = (r, c)
+                if s in self.terminals:
+                    u[s] = self.terminals[s]
+                elif s not in self.walls:
+                    policy_changed_states.add(s)
+                    u[s] = 0.0
+                    #pi[s] = GridWorld.actions[random.randint(0, 7)]
+                    pi[s] = GridWorld.run_up
+                    for a in GridWorld.actions:
+                        for (p, s1) in self.t(s, a):
+                            if s1 not in tt:
+                                tt[s1] = set()
+                            tt[s1].add(s)
+
+        while True:
+            # print("in policy iteration: changed={}".format(len(policy_changed_states)))
+            u, utility_changed_states = self.policy_evaluate(pi, u, tt, policy_changed_states)
+            policy_changed_states = set()
+            to_be_visited = []
+            visited = set()
+
+            # states = set()
+            # for s in utility_changed_states:
+            #     for s0 in tt[s]:
+            #         states.add(s0)
+            for s in utility_changed_states:
+                to_be_visited.append(s)
+                visited.add(s)
+
+            while len(to_be_visited) > 0:
+                s = to_be_visited.pop(0)
+                visited.add(s)
+                expected_utilities = []
+                for a in self.actions:
+                    sigma = 0.0
+                    for (p, s1) in self.t(s, a):
+                        sigma += p * u[s1]
+                    expected_utilities.append(self.r(s, a) + self.gamma * sigma)
+                # find the best action for state s
+                best_eu = expected_utilities[0]
+                best_a = GridWorld.actions[0]
+                for i in range(1, 8):  # 8 actions
+                    if expected_utilities[i] > best_eu:
+                        best_eu = expected_utilities[i]
+                        best_a = GridWorld.actions[i]
+                if best_a != pi[s] or s in utility_changed_states:
+                    for s0 in tt[s]:
+                        if s0 not in visited:
+                            to_be_visited.append(s0)
+                    # print("{} :: {}:{} - {}:{}".format(len(to_be_visited), best_a, pi[s], s, utility_changed_states))
+
+                if best_a != pi[s]:
+                    pi[s] = best_a
+                    policy_changed_states.add(s)
+
+            # print("in policy iteration: visited={}".format(len(visited)))
+            if len(policy_changed_states) == 0:
+                return pi
+
+    def policy_evaluate(self, pi, u, tt, changed_states):
+        utility_changed_states = set()
+
+        if len(changed_states) > 10000:
+            k = 2
+        elif len(changed_states) > 1000:
+            k = 5
+        elif len(changed_states) > 500:
+            k = 10
+        else:
+            k = 20
+        for i in range(k):
+            if len(changed_states) == 0:
+                break
+
+            to_be_visited = []
+            visited = set()
+            for s in changed_states:
+                to_be_visited.append(s)
+                visited.add(s)
+            changed_states = set()
+
+            while len(to_be_visited) > 0:
+                s = to_be_visited.pop(0)
+                visited.add(s)
+                a = pi[s]
+                v = self.r(s, a) + self.gamma * sum([p * u[s1] for (p, s1) in self.t(s, a)])
+                if v != u[s]:  # utility value changed for s
+                    changed_states.add(s)
+                    utility_changed_states.add(s)
+                    u[s] = v
+                    for s0 in tt[s]:  # from s0 take some action will reach s
+                        if s0 not in visited:
+                            to_be_visited.append(s0)
+
+        #    print("in policy evaluate: k={}, visited={}".format(k, len(visited)))
+        # print("in policy evaluate: utility_changed_states={}".format(len(utility_changed_states)))
+        return u, utility_changed_states
+
+    def run(self):
+        pi = self.policy_iteration()
+        
+        # write result
+        with open('output.txt', 'w') as f:
+            for r in range(self.rows, 0, -1):
+                comma = ''
+                for c in range(1, self.cols + 1):
+                    s = (r, c)
+                    if s in self.terminals:
+                        f.write(comma + "Exit")
+                    elif s in self.walls:
+                        f.write(comma + "None")
+                    else:
+                        f.write(comma + GridWorld.actions_str[pi[s]])
+                    comma = ','
+                f.write("\n")
+            
+
+
+def main():
+    # read input.txt
+    with open('input.txt', 'r') as f:
+        # <GRID SIZE>
+        line = f.readline().strip()
+        items = line.split(',')
+        rows = int(items[0])
+        cols = int(items[1])
+
+        # <WALL CELLS NUMBER>
+        line = f.readline().strip()
+        n = int(line)
+
+        # <WALL CELLS POSITION>
+        walls = set()
+        for i in range(n):
+            line = f.readline().strip()
+            items = line.split(',')
+            cell = (int(items[0]), int(items[1]))
+            walls.add(cell)
+
+        # <TERMINAL STATES NUMBER>
+        line = f.readline().strip()
+        n = int(line)
+
+        # <TERMINAL STATES POSITION and REWARDS>
+        terminals = dict()  # dictionary of {cell:reward}
+        for i in range(n):
+            line = f.readline().strip()
+            items = line.split(',')
+            cell = (int(items[0]), int(items[1]))
+            reward = float(items[2])
+            terminals[cell] = reward
+
+        # <TRANSITION MODEL>
+        line = f.readline().strip()
+        items = line.split(',')
+        p_walk = float(items[0])
+        p_run = float(items[1])
+
+        # <REWARDS>
+        line = f.readline().strip()
+        items = line.split(',')
+        r_walk = float(items[0])
+        r_run = float(items[1])
+
+        # <DISCOUNT FACTOR>
+        line = f.readline().strip()
+        gamma = float(line)
+
+    # # value iteration
+    # gw = GridWorldVI(rows, cols, walls, terminals, p_walk, p_run, r_walk, r_run, gamma)
+    # gw.run()
+
+    # # policy iteration
+    # gw = GridWorldPI(rows, cols, walls, terminals, p_walk, p_run, r_walk, r_run, gamma)
+    # gw.run()
+
+    if rows * cols <= 10000:
+        gw = GridWorldPI(rows, cols, walls, terminals, p_walk, p_run, r_walk, r_run, gamma)
+    else:
+        gw = GridWorldPIEnhanced(rows, cols, walls, terminals, p_walk, p_run, r_walk, r_run, gamma)
+    gw.run()
+
+
+if __name__ == "__main__":
+    
+    main()
